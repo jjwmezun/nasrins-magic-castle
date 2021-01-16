@@ -1,5 +1,7 @@
 ( function() {
 
+    let reset = false;
+
     const input = ( function() {
         const keys = {
             left: 37,
@@ -77,11 +79,23 @@
             },
             hitMin: function() {
                 return value === min;
+            },
+            setMax: function( newMax ) {
+                max = newMax;
+                if ( value > max ) {
+                    value = max;
+                }
+            },
+            setMin: function( newMin ) {
+                min = newMin;
+                if ( value < min ) {
+                    value = min;
+                }
             }
         }
     };
 
-    const blockSize = 16;
+    const blockSize = 32;
     const blocksToPixels = ( blocks ) => blocks * blockSize;
     const pixelsToBlocks = ( pixels ) => Math.floor( pixels / blockSize );
 
@@ -92,8 +106,13 @@
 
     const canvasRect = { x: 0, y: 0, w: canvasWidthPixels, h: canvasHeightPixels };
 
-    const canvas = document.getElementById('nasrin-canvas');
-    const ctx = canvas.getContext('2d');
+    const canvas = document.getElementById( 'nasrin-canvas' );
+    const ctx = canvas.getContext( '2d' );
+
+    canvas.setAttribute( 'width', canvasWidthPixels );
+    canvas.setAttribute( 'height', canvasHeightPixels );
+    const root = document.getElementById( 'nasrin' );
+    root.setAttribute( 'style', `width: ${ canvasWidthPixels }` );
 
     const renderRect = function( rect, color ) {
         ctx.fillStyle = color;
@@ -156,16 +175,18 @@
 
     const createPlayer = () => {
         return {
-            coords: { x: blocksToPixels( 2 ), y: blocksToPixels( 2 ), w: 16, h: 24 },
+            coords: { x: blocksToPixels( 2 ), y: blocksToPixels( 2 ), w: 32, h: 48 },
             accx: 0,
             accy: 0,
             vx: createLimitedNumber( 0, 4, -4 ),
-            vy: createLimitedNumber( 0, 4, -5 ),
+            vy: createLimitedNumber( 0, 5, -4 ),
             state: `falling`,
             jumpLock: false,
             right: function() { return this.coords.x + this.coords.w; },
             bottom: function() { return this.coords.y + this.coords.h },
             update: function() {
+                this.vx.setMax( ( this.state === `ground` ) ? 4 : 2 );
+                this.vx.setMin( ( this.state === `ground` ) ? -4 : -2 );
                 if ( this.state === `ground` ) {
                     this.state = `falling`;
                 }
@@ -195,14 +216,14 @@
                 }
                 this.vy.add( this.accy );
 
-                if ( this.state === `jump` && ( this.vy.hitMin() || !input.held( `up` ) ) ) {
+                if ( this.state === `jump` && ( this.vy.hitMin() ) ) {
                     this.state = `falling`;
                 }
 
                 this.coords.y += this.vy.get();
 
-                const bottomXTile = pixelsToBlocks( this.bottom() - 4.0 );
-                const topXTile = pixelsToBlocks( this.coords.y + 4.0 );
+                const bottomXTile = pixelsToBlocks( this.bottom() - 6.0 );
+                const topXTile = pixelsToBlocks( this.coords.y + 6.0 );
                 const leftXTile = pixelsToBlocks( this.coords.x );
                 const rightXTile = pixelsToBlocks( this.right() );
                 const leftBottomTileIndex = scene.index( leftXTile, bottomXTile );
@@ -244,12 +265,12 @@
                 else if ( rightBottomTile === 1 || rightTopTile === 1 ) {
                     this.vx.multi( -0.5 );
                     this.accx = 0.0;
-                    this.coords.x = blocksToPixels( rightXTile ) - this.coords.w;
+                    this.coords.x = blocksToPixels( rightXTile ) - this.coords.w - 2;
                 }
 
                 const bottomYTile = pixelsToBlocks( this.bottom() );
-                const bottomXLeftTile = pixelsToBlocks( this.coords.x + 2.0 );
-                const bottomXRightTile = pixelsToBlocks( this.right() - 2.0 );
+                const bottomXLeftTile = pixelsToBlocks( this.coords.x );
+                const bottomXRightTile = pixelsToBlocks( this.right() );
                 const bottomLeftTile = scene.grid[ scene.index( bottomXLeftTile, bottomYTile ) ];
                 const bottomRightTile = scene.grid[ scene.index( bottomXRightTile, bottomYTile ) ];
                 if ( bottomLeftTile === 1 || bottomRightTile === 1 ) {
@@ -361,7 +382,7 @@
 
     const changeGrid = function( value, args ) {
         if ( args.length < 2 ) {
-            throw `¡Now ’nough arguments for block spell! ¡You need 2 #s!`;
+            throw `¡Not ’nough arguments for block spell! ¡You need 2 #s!`;
         }
         let x = Math.floor( args[ 0 ] );
         let y = Math.floor( args[ 1 ] );
@@ -405,10 +426,7 @@
             return Math.floor(Math.random() * (max - min + 1) + min);
         },
         reset: () => {
-            player = createPlayer();
-            scene = createScene();
-            score.reset();
-            magic.reset();
+            reset = true;
         }
     };
 
@@ -436,9 +454,6 @@
     document.getElementById( `nasrin-submit` ).addEventListener( `click`, function( e ) {
         const content = document.getElementById( `nasrin-input` ).value;
         const notEnoughMagic = !magic.testSub( content.length );
-        if ( !notEnoughMagic ) {
-            magic.sub( content.length );
-        }
         let data = "";
         let status = "";
         for ( const character of content )
@@ -483,12 +498,23 @@
                 }
             }
         }
+        console.log( data );
         data = JSON.parse( `{ "data": [${ data }]}` );
         for ( const action of data.data )
         {
             if ( !notEnoughMagic || action[ 0 ] === `reset` ) {
                 doSpell( action );
             }
+        }
+        if ( reset ) {
+            player = createPlayer();
+            scene = createScene();
+            score.reset();
+            magic.reset();
+            reset = false;
+        }
+        else if ( !notEnoughMagic ) {
+            magic.sub( content.length );
         }
     });
 })();
